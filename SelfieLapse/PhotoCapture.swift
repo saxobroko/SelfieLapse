@@ -7,12 +7,11 @@ class PhotoCapture {
     
     // Face detection properties
     private var faceDetector: CIDetector?
-    private var overlayView: FaceAlignmentOverlay?
     
     func setupCamera() {
         // Configure camera for front-facing capture
-        guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, 
-                                                 for: .video, 
+        guard let device = AVCaptureDevice.default(.builtInWideAngleCamera,
+                                                 for: .video,
                                                  position: .front) else {
             return
         }
@@ -20,8 +19,8 @@ class PhotoCapture {
         
         // Setup face detection
         let options = [CIDetectorAccuracy: CIDetectorAccuracyHigh]
-        faceDetector = CIDetector(ofType: CIDetectorTypeFace, 
-                                 context: nil, 
+        faceDetector = CIDetector(ofType: CIDetectorTypeFace,
+                                 context: nil,
                                  options: options)
     }
     

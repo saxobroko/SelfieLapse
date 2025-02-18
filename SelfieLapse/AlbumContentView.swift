@@ -1,41 +1,83 @@
+// AlbumContentView.swift
 // Created by saxobroko
-// Last updated: 2025-02-18 00:29:55 UTC
+// Last updated: 2025-02-18 03:14:15 UTC
 
 import SwiftUI
 import PhotosUI
 import AVKit
 import Photos
 
-struct AlbumContentView: View {
-    let album: Album
-    let timelapseGenerator: TimelapseGenerator
-    let cameraManager: CameraManager
-    @Binding var showingTimelapseSettings: Bool
-    @Binding var timelapseSettings: TimelapseSettings
-    @Binding var showingTimelapseProgress: Bool
-    @Binding var exportURL: URL?
-    @Binding var showingPhotosPicker: Bool
-    @Binding var showingAlbumPicker: Bool
-    @Binding var selectedPhotos: [PhotosPickerItem]
-    @Binding var selectedAssetCollection: PHAssetCollection?
-    @Binding var showingCamera: Bool
-    @Binding var gridColumnCount: Int
-    @Binding var selectedPhotoForDetail: Photo?
-    @Binding var player: AVPlayer?
-    @Binding var showErrorAlert: Bool
-    @Binding var errorMessage: String
-    @Binding var status: String
-    let onSavePhoto: (UIImage, Date) -> Void
-    let onDeletePhoto: (Photo) -> Void
-    
-    @State private var sortedPhotos: [Photo] = []
-    
-    private func updateSortedPhotos() {
-        sortedPhotos = album.photos.sorted { $0.captureDate > $1.captureDate }
+// MARK: - Supporting Types
+struct AlbumContentBindings {
+    var showingTimelapseSettings: Binding<Bool>
+    var timelapseSettings: Binding<TimelapseSettings>
+    var showingTimelapseProgress: Binding<Bool>
+    var exportURL: Binding<URL?>
+    var showingPhotosPicker: Binding<Bool>
+    var showingAlbumPicker: Binding<Bool>
+    var selectedPhotos: Binding<[PhotosPickerItem]>
+    var showingCamera: Binding<Bool>
+    var gridColumnCount: Binding<Int>
+    var selectedPhotoForDetail: Binding<Photo?>
+    var player: Binding<AVPlayer?>
+    var showErrorAlert: Binding<Bool>
+    var errorMessage: Binding<String>
+    var status: Binding<String>
+}
+
+struct AlbumContentHandlers {
+    var onSavePhoto: (UIImage, Date) -> Void
+    var onDeletePhoto: (Photo) -> Void
+}
+
+protocol AlbumSelectionHandler {
+    func handleSelectedAlbum(_ collection: PHAssetCollection)
+}
+
+// MARK: - Preview Helpers
+extension Album {
+    static var preview: Album {
+        Album(name: "Preview Album")
     }
+}
+
+extension TimelapseSettings {
+    static var `default`: TimelapseSettings {
+        TimelapseSettings()
+    }
+}
+
+struct AlbumContentView: View {
+    @StateObject private var viewModel: AlbumContentViewModel
     
-    var gridColumns: [GridItem] {
-        Array(repeating: GridItem(.flexible(), spacing: 1), count: gridColumnCount)
+    init(
+        album: Album,
+        timelapseGenerator: TimelapseGenerator,
+        cameraManager: CameraManager,
+        bindings: AlbumContentBindings,
+        handlers: AlbumContentHandlers
+    ) {
+        _viewModel = StateObject(wrappedValue: AlbumContentViewModel(
+            album: album,
+            timelapseGenerator: timelapseGenerator,
+            cameraManager: cameraManager,
+            showingTimelapseSettings: bindings.showingTimelapseSettings,
+            timelapseSettings: bindings.timelapseSettings,
+            showingTimelapseProgress: bindings.showingTimelapseProgress,
+            exportURL: bindings.exportURL,
+            showingPhotosPicker: bindings.showingPhotosPicker,
+            showingAlbumPicker: bindings.showingAlbumPicker,
+            selectedPhotos: bindings.selectedPhotos,
+            showingCamera: bindings.showingCamera,
+            gridColumnCount: bindings.gridColumnCount,
+            selectedPhotoForDetail: bindings.selectedPhotoForDetail,
+            player: bindings.player,
+            showErrorAlert: bindings.showErrorAlert,
+            errorMessage: bindings.errorMessage,
+            status: bindings.status,
+            onSavePhoto: handlers.onSavePhoto,
+            onDeletePhoto: handlers.onDeletePhoto
+        ))
     }
     
     var body: some View {
@@ -43,230 +85,274 @@ struct AlbumContentView: View {
             Color.black.ignoresSafeArea()
             
             VStack(spacing: 0) {
-                PhotoGridView(
-                    photos: sortedPhotos,
-                    gridColumns: gridColumns,
-                    onPhotoSelected: { photo in
-                        selectedPhotoForDetail = photo
-                    }
-                )
-                .animation(.spring(duration: 0.3), value: sortedPhotos)
-                
-                ControlsView(
-                    album: album,
-                    gridColumnCount: $gridColumnCount,
-                    showingPhotosPicker: $showingPhotosPicker,
-                    showingAlbumPicker: $showingAlbumPicker,
-                    showingCamera: $showingCamera,
-                    showingTimelapseSettings: $showingTimelapseSettings
-                )
+                photoGrid
+                controls
             }
             
-            if !status.isEmpty {
-                LoadingOverlay(message: status)
+            overlays
+        }
+        .onAppear { viewModel.updateSortedPhotos() }
+        .navigationTitle(viewModel.album.name)
+        .navigationBarTitleDisplayMode(.inline)
+        .withPhotosPicker(viewModel: viewModel)
+        .withSheets(viewModel: viewModel)
+        .withAlerts(viewModel: viewModel)
+        .withToolbar(viewModel: viewModel)
+        .onDisappear {
+            viewModel.cleanup()
+        }
+    }
+    
+    // MARK: - View Components
+    private var photoGrid: some View {
+        PhotoGridView(
+            photos: viewModel.sortedPhotos,
+            gridColumns: viewModel.gridColumns,
+            onPhotoSelected: { photo in
+                viewModel.selectedPhotoForDetail = photo
+            }
+        )
+        .animation(.spring(duration: 0.3), value: viewModel.sortedPhotos)
+    }
+    
+    private var controls: some View {
+        ControlsView(
+            album: viewModel.album,
+            gridColumnCount: Binding(
+                get: { self.viewModel.gridColumnCount },
+                set: { self.viewModel.gridColumnCount = $0 }
+            ),
+            showingPhotosPicker: Binding(
+                get: { self.viewModel.showingPhotosPicker },
+                set: { self.viewModel.showingPhotosPicker = $0 }
+            ),
+            showingAlbumPicker: Binding(
+                get: { self.viewModel.showingAlbumPicker },
+                set: { self.viewModel.showingAlbumPicker = $0 }
+            ),
+            showingCamera: Binding(
+                get: { self.viewModel.showingCamera },
+                set: { self.viewModel.showingCamera = $0 }
+            ),
+            showingTimelapseSettings: Binding(
+                get: { self.viewModel.showingTimelapseSettings },
+                set: { self.viewModel.showingTimelapseSettings = $0 }
+            )
+        )
+    }
+    
+    private var overlays: some View {
+        ZStack {
+            if !viewModel.status.isEmpty {
+                LoadingOverlay(message: viewModel.status)
+            }
+            
+            if viewModel.isUpgradingPhotos {
+                upgradeProgressView
             }
         }
-        .onAppear {
-            updateSortedPhotos()
+    }
+    
+    private var upgradeProgressView: some View {
+        VStack {
+            ProgressView(value: viewModel.upgradingProgress) {
+                Text("Upgrading photo quality...")
+            }
+            .progressViewStyle(.linear)
+            .padding()
+            .background(.ultraThinMaterial)
         }
-        .navigationTitle(album.name)
-        .navigationBarTitleDisplayMode(.inline)
-        .photosPicker(
-            isPresented: $showingPhotosPicker,
-            selection: $selectedPhotos,
+        .transition(.move(edge: .bottom))
+    }
+}
+
+// MARK: - View Modifiers
+private extension View {
+    func withPhotosPicker(viewModel: AlbumContentViewModel) -> some View {
+        photosPicker(
+            isPresented: Binding(
+                get: { viewModel.showingPhotosPicker },
+                set: { viewModel.showingPhotosPicker = $0 }
+            ),
+            selection: Binding(
+                get: { viewModel.selectedPhotos },
+                set: { viewModel.selectedPhotos = $0 }
+            ),
             matching: .images,
             preferredItemEncoding: .current
         )
-        .photosPicker(
-            isPresented: $showingAlbumPicker,
-            selection: $selectedAssetCollection,
-            matching: [.albums, .smartAlbums],
-            preferredItemEncoding: .current
-        )
-        .onChange(of: selectedPhotos) { oldValue, newValue in
-            guard !newValue.isEmpty else { return }
-            
-            Task {
-                status = "Preparing to import photos..."
-                let totalPhotos = selectedPhotos.count
-                var importedCount = 0
-                var currentBatch = [PhotosPickerItem]()
-                
-                for item in selectedPhotos {
-                    currentBatch.append(item)
-                    
-                    if currentBatch.count >= 50 {
-                        await processBatch(currentBatch, totalPhotos: totalPhotos, startingCount: importedCount)
-                        importedCount += currentBatch.count
-                        currentBatch.removeAll()
+    }
+    
+    func withSheets(viewModel: AlbumContentViewModel) -> some View {
+        self
+            .sheet(isPresented: Binding(
+                get: { viewModel.showingAlbumPicker },
+                set: { viewModel.showingAlbumPicker = $0 }
+            )) {
+                AlbumListView { collection in
+                    viewModel.handleSelectedAlbum(collection)
+                }
+            }
+            .sheet(isPresented: Binding(
+                get: { viewModel.showingCamera },
+                set: { viewModel.showingCamera = $0 }
+            )) {
+                CameraView(cameraManager: viewModel.cameraManager) { image in
+                    if let image = image {
+                        viewModel.onSavePhoto(image, .now)
                     }
                 }
-                
-                if !currentBatch.isEmpty {
-                    await processBatch(currentBatch, totalPhotos: totalPhotos, startingCount: importedCount)
+            }
+            .sheet(item: Binding(
+                get: { viewModel.selectedPhotoForDetail },
+                set: { viewModel.selectedPhotoForDetail = $0 }
+            )) { photo in
+                PhotoDetailView(photo: photo) { photo in
+                    viewModel.onDeletePhoto(photo)
                 }
-                
-                await MainActor.run {
-                    selectedPhotos.removeAll()
-                    status = ""
-                    updateSortedPhotos()
+            }
+            .sheet(isPresented: Binding(
+                get: { viewModel.showingTimelapseSettings },
+                set: { viewModel.showingTimelapseSettings = $0 }
+            )) {
+                TimelapseSettingsView(settings: Binding(
+                    get: { viewModel.timelapseSettings },
+                    set: { viewModel.timelapseSettings = $0 }
+                )) {
+                    viewModel.handleTimelapseGeneration()
+                }
+            }
+            .sheet(isPresented: Binding(
+                get: { viewModel.showingTimelapseProgress },
+                set: { viewModel.showingTimelapseProgress = $0 }
+            )) {
+                TimelapseProgressView(
+                    progress: viewModel.timelapseGenerator.progress,
+                    status: viewModel.timelapseGenerator.status,
+                    exportURL: viewModel.exportURL,
+                    player: Binding(
+                        get: { viewModel.player },
+                        set: { viewModel.player = $0 }
+                    ),
+                    showingProgress: Binding(
+                        get: { viewModel.showingTimelapseProgress },
+                        set: { viewModel.showingTimelapseProgress = $0 }
+                    ),
+                    errorMessage: Binding(
+                        get: { viewModel.errorMessage },
+                        set: { viewModel.errorMessage = $0 }
+                    ),
+                    showErrorAlert: Binding(
+                        get: { viewModel.showErrorAlert },
+                        set: { viewModel.showErrorAlert = $0 }
+                    )
+                )
+            }
+    }
+    
+    func withAlerts(viewModel: AlbumContentViewModel) -> some View {
+        self
+            .alert("Error", isPresented: Binding(
+                get: { viewModel.showErrorAlert },
+                set: { viewModel.showErrorAlert = $0 }
+            )) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(viewModel.errorMessage)
+            }
+            .alert("Memory Warning", isPresented: Binding(
+                get: { viewModel.showMemoryWarning },
+                set: { viewModel.showMemoryWarning = $0 }
+            )) {
+                Button("OK", role: .cancel) {
+                    viewModel.showMemoryWarning = false
+                }
+            } message: {
+                Text("The app is using \(viewModel.memoryWarningLevel.rawValue) memory. Consider closing other apps or restarting the app if performance degrades.")
+            }
+    }
+    
+    func withToolbar(viewModel: AlbumContentViewModel) -> some View {
+        toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                if viewModel.isUpgradingPhotos {
+                    Button("Cancel") {
+                        viewModel.upgradeTask?.cancel()
+                    }
                 }
             }
         }
-        .onChange(of: selectedAssetCollection) { oldValue, newValue in
-            guard let collection = selectedAssetCollection else { return }
-            
-            Task {
-                status = "Preparing to import album..."
-                
+    }
+}
+
+// MARK: - Preview Provider
+#Preview {
+    NavigationStack {
+        AlbumContentView(
+            album: .preview,
+            timelapseGenerator: TimelapseGenerator(),
+            cameraManager: CameraManager(),
+            bindings: AlbumContentBindings(
+                showingTimelapseSettings: .constant(false),
+                timelapseSettings: .constant(.default),
+                showingTimelapseProgress: .constant(false),
+                exportURL: .constant(nil),
+                showingPhotosPicker: .constant(false),
+                showingAlbumPicker: .constant(false),
+                selectedPhotos: .constant([]),
+                showingCamera: .constant(false),
+                gridColumnCount: .constant(3),
+                selectedPhotoForDetail: .constant(nil),
+                player: .constant(nil),
+                showErrorAlert: .constant(false),
+                errorMessage: .constant(""),
+                status: .constant("")
+            ),
+            handlers: AlbumContentHandlers(
+                onSavePhoto: { _, _ in },
+                onDeletePhoto: { _ in }
+            )
+        )
+    }
+}
+
+// MARK: - ViewModel Extensions
+extension AlbumContentViewModel: AlbumSelectionHandler {
+    func handleSelectedAlbum(_ collection: PHAssetCollection) {
+        Task {
+            do {
+                status = "Importing photos..."
                 let fetchOptions = PHFetchOptions()
                 fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: true)]
-                
                 let assets = PHAsset.fetchAssets(in: collection, options: fetchOptions)
-                let totalPhotos = assets.count
-                var importedCount = 0
-                var currentBatch = [PHAsset]()
                 
-                for i in 0..<totalPhotos {
+                for i in 0..<assets.count {
                     let asset = assets[i]
                     if asset.mediaType == .image {
-                        currentBatch.append(asset)
+                        let options = PHImageRequestOptions()
+                        options.deliveryMode = .highQualityFormat
+                        options.isNetworkAccessAllowed = true
+                        options.isSynchronous = false
                         
-                        if currentBatch.count >= 50 {
-                            await processAssetBatch(currentBatch, totalPhotos: totalPhotos, startingCount: importedCount)
-                            importedCount += currentBatch.count
-                            currentBatch.removeAll()
-                        }
-                    }
-                }
-                
-                if !currentBatch.isEmpty {
-                    await processAssetBatch(currentBatch, totalPhotos: totalPhotos, startingCount: importedCount)
-                }
-                
-                await MainActor.run {
-                    selectedAssetCollection = nil
-                    status = ""
-                    updateSortedPhotos()
-                }
-            }
-        }
-        .sheet(isPresented: $showingCamera) {
-            CameraView(cameraManager: cameraManager) { image in
-                if let image = image {
-                    onSavePhoto(image, .now)
-                }
-            }
-        }
-        .sheet(item: $selectedPhotoForDetail) { photo in
-            PhotoDetailView(photo: photo) { photo in
-                onDeletePhoto(photo)
-            }
-        }
-        .sheet(isPresented: $showingTimelapseSettings) {
-            TimelapseSettingsView(settings: $timelapseSettings) {
-                showingTimelapseProgress = true
-                Task {
-                    do {
-                        let url = try await timelapseGenerator.generateTimelapse(
-                            from: sortedPhotos.reversed(),
-                            settings: timelapseSettings
-                        )
-                        await MainActor.run {
-                            exportURL = url
-                            player = AVPlayer(url: url)
-                        }
-                    } catch {
-                        await MainActor.run {
-                            errorMessage = error.localizedDescription
-                            showErrorAlert = true
-                        }
-                    }
-                }
-            }
-        }
-        .sheet(isPresented: $showingTimelapseProgress) {
-            TimelapseProgressView(
-                progress: timelapseGenerator.progress,
-                status: timelapseGenerator.status,
-                exportURL: exportURL,
-                player: $player,
-                showingProgress: $showingTimelapseProgress,
-                errorMessage: $errorMessage,
-                showErrorAlert: $showErrorAlert
-            )
-        }
-        .alert("Error", isPresented: $showErrorAlert) {
-            Button("OK", role: .cancel) { }
-        } message: {
-            Text(errorMessage)
-        }
-        .onDisappear {
-            player?.pause()
-            player = nil
-        }
-    }
-    
-    private func processBatch(_ batch: [PhotosPickerItem], totalPhotos: Int, startingCount: Int) async {
-        await withTaskGroup(of: Void.self) { group in
-            for item in batch {
-                group.addTask {
-                    do {
-                        if let data = try? await item.loadTransferable(type: Data.self),
-                           let image = UIImage(data: data) {
-                            var captureDate = Date()
-                            if let imageSource = CGImageSourceCreateWithData(data as CFData, nil),
-                               let properties = CGImageSourceCopyPropertiesAtIndex(imageSource, 0, nil) as? [String: Any],
-                               let exif = properties["{Exif}"] as? [String: Any],
-                               let dateTimeOriginal = exif["DateTimeOriginal"] as? String {
-                                let formatter = DateFormatter()
-                                formatter.dateFormat = "yyyy:MM:dd HH:mm:ss"
-                                if let date = formatter.date(from: dateTimeOriginal) {
-                                    captureDate = date
-                                }
-                            }
-                            
-                            await MainActor.run {
-                                onSavePhoto(image, captureDate)
-                                status = "Importing photos... \(startingCount + batch.firstIndex(of: item)! + 1)/\(totalPhotos)"
-                                updateSortedPhotos()
-                            }
-                        }
-                    } catch {
-                        print("Error processing photo: \(error)")
-                    }
-                }
-            }
-        }
-    }
-    
-    private func processAssetBatch(_ batch: [PHAsset], totalPhotos: Int, startingCount: Int) async {
-        await withTaskGroup(of: Void.self) { group in
-            for asset in batch {
-                group.addTask {
-                    let options = PHImageRequestOptions()
-                    options.deliveryMode = .highQualityFormat
-                    options.isNetworkAccessAllowed = true
-                    options.isSynchronous = false
-                    
-                    await withCheckedContinuation { continuation in
                         PHImageManager.default().requestImage(
                             for: asset,
                             targetSize: PHImageManagerMaximumSize,
-                            contentMode: .default,
+                            contentMode: .aspectFit,
                             options: options
-                        ) { image, info in
+                        ) { [weak self] image, _ in
                             if let image = image {
-                                Task { @MainActor in
-                                    onSavePhoto(image, asset.creationDate ?? .now)
-                                    status = "Importing photos... \(startingCount + batch.firstIndex(of: asset)! + 1)/\(totalPhotos)"
-                                    updateSortedPhotos()
-                                }
+                                self?.onSavePhoto(image, asset.creationDate ?? .now)
                             }
-                            continuation.resume()
                         }
                     }
+                    status = "Importing photos... \(i + 1)/\(assets.count)"
                 }
+                status = ""
+                updateSortedPhotos()
+            } catch {
+                errorMessage = "Failed to import photos: \(error.localizedDescription)"
+                showErrorAlert = true
+                status = ""
             }
         }
     }

@@ -8,6 +8,7 @@ struct ScreenFlash: View {
             .fill(.white)
             .ignoresSafeArea()
             .opacity(isFlashing ? 1 : 0)
-            .animation(.easeOut(duration: 0.2), value: isFlashing)
+            // Remove default animation to use controlled animations in CameraView
+            .allowsHitTesting(false)
     }
 }

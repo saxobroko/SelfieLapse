@@ -1,4 +1,5 @@
 import SwiftUI
+import AVFoundation
 
 struct TimelapseSettings {
     var fps: Double = 30
@@ -18,9 +19,20 @@ struct TimelapseSettings {
         
         var preset: String {
             switch self {
-            case .low: return AVAssetExportPresetMediumQuality
-            case .medium: return AVAssetExportPresetHighestQuality
-            case .high: return AVAssetExportPresetHEVCHighestQuality
+            case .low:
+                return AVAssetExportPreset960x540
+            case .medium:
+                return AVAssetExportPreset1920x1080
+            case .high:
+                return AVAssetExportPreset3840x2160
+            }
+        }
+        
+        var description: String {
+            switch self {
+            case .low: return "540p"
+            case .medium: return "1080p"
+            case .high: return "4K"
             }
         }
     }

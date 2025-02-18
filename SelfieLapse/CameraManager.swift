@@ -1,81 +1,108 @@
 import AVFoundation
 import UIKit
 
-class CameraManager: ObservableObject {
-    private let session = AVCaptureSession()
-    private var camera: AVCaptureDevice?
-    private var photoOutput: AVCapturePhotoOutput?
-    private var previewLayer: AVCaptureVideoPreviewLayer?
+class CameraManager: NSObject, ObservableObject {
+    let session = AVCaptureSession()
+    private var photoOutput = AVCapturePhotoOutput()
+    private var completionHandler: ((UIImage?) -> Void)?
     
-    @Published var isReady = false
-    @Published var error: Error?
-    
-    init() {
+    override init() {
+        super.init()
         setupCamera()
     }
     
-    func setupCamera() {
-        session.sessionPreset = .photo
+    private func setupCamera() {
+        // Use high quality capture session preset
+        if session.canSetSessionPreset(.photo) {
+            session.sessionPreset = .photo
+        }
         
-        camera = AVCaptureDevice.default(.builtInWideAngleCamera,
-                                       for: .video,
-                                       position: .front)
-        
-        guard let camera = camera,
-              let input = try? AVCaptureDeviceInput(device: camera) else {
-            error = CameraError.setupFailed
+        guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front) else {
             return
         }
         
-        photoOutput = AVCapturePhotoOutput()
-        
-        if session.canAddInput(input) && 
-           session.canAddOutput(photoOutput!) {
-            session.addInput(input)
-            session.addOutput(photoOutput!)
-            isReady = true
-        } else {
-            error = CameraError.setupFailed
+        do {
+            // Configure camera for highest quality
+            try device.lockForConfiguration()
+            
+            // Enable auto focus
+            if device.isFocusModeSupported(.continuousAutoFocus) {
+                device.focusMode = .continuousAutoFocus
+            }
+            
+            // Enable auto exposure
+            if device.isExposureModeSupported(.continuousAutoExposure) {
+                device.exposureMode = .continuousAutoExposure
+            }
+            
+            // Enable auto white balance
+            if device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
+                device.whiteBalanceMode = .continuousAutoWhiteBalance
+            }
+            
+            // Only enable low light boost if supported
+            if device.isLowLightBoostSupported {
+                device.automaticallyEnablesLowLightBoostWhenAvailable = true
+            }
+            
+            device.unlockForConfiguration()
+            
+            let input = try AVCaptureDeviceInput(device: device)
+            if session.canAddInput(input) {
+                session.addInput(input)
+            }
+            
+            // Configure photo output for highest quality
+            if session.canAddOutput(photoOutput) {
+                session.addOutput(photoOutput)
+                
+                // Get the maximum supported dimensions
+                let dimensions = photoOutput.maxPhotoDimensions
+                print("Maximum photo dimensions: \(dimensions.width) x \(dimensions.height)")
+                
+                // Enable depth data delivery if supported
+                photoOutput.isDepthDataDeliveryEnabled = photoOutput.isDepthDataDeliverySupported
+            }
+            
+        } catch {
+            print("Error setting up camera: \(error.localizedDescription)")
         }
     }
     
     func startSession() {
-        guard !session.isRunning else { return }
-        session.startRunning()
+        DispatchQueue.global(qos: .userInitiated).async {
+            self.session.startRunning()
+        }
     }
     
     func stopSession() {
-        guard session.isRunning else { return }
         session.stopRunning()
     }
     
-    @MainActor
-    func capturePhoto(completion: @escaping (UIImage?) -> Void) async {
-        guard let photoOutput = photoOutput else {
-            completion(nil)
+    func capturePhoto(completion: @escaping (UIImage?) -> Void) {
+        completionHandler = completion
+        
+        // Configure photo settings for maximum quality
+        let settings = AVCapturePhotoSettings()
+        
+        // Configure for maximum quality
+        settings.flashMode = .off // We're using screen flash instead
+        settings.maxPhotoDimensions = photoOutput.maxPhotoDimensions
+        
+        // Start with balanced priority and adjust if needed
+        settings.photoQualityPrioritization = .balanced
+        
+        photoOutput.capturePhoto(with: settings, delegate: self)
+    }
+}
+
+extension CameraManager: AVCapturePhotoCaptureDelegate {
+    func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
+        guard let data = photo.fileDataRepresentation(),
+              let image = UIImage(data: data) else {
+            completionHandler?(nil)
             return
         }
-        
-        let settings = AVCapturePhotoSettings()
-        photoOutput.capturePhoto(with: settings) { photoData, error in
-            if let error = error {
-                self.error = error
-                completion(nil)
-                return
-            }
-            
-            guard let data = photoData,
-                  let image = UIImage(data: data) else {
-                completion(nil)
-                return
-            }
-            
-            completion(image)
-        }
-    }
-    
-    enum CameraError: Error {
-        case setupFailed
-        case captureError
+        completionHandler?(image)
     }
 }

@@ -1,3 +1,11 @@
+//
+//  ShareTimelapseButton.swift
+//  SelfieLapse
+//
+//  Created by Saxon on 18/2/2025.
+//
+
+
 // Created by saxobroko
 // Last updated: 2025-02-18 00:38:51 UTC
 

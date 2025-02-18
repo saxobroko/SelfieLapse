@@ -1,32 +1,24 @@
-//
-//  SelfieLapseApp.swift
-//  SelfieLapse
-//
-//  Created by Saxon on 18/2/2025.
-//
-
 import SwiftUI
 import SwiftData
 
 @main
 struct SelfieLapseApp: App {
-    var sharedModelContainer: ModelContainer = {
-        let schema = Schema([
-            Item.self,
-        ])
-        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
-
+    let modelContainer: ModelContainer
+    
+    init() {
         do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
+            let schema = Schema([Album.self, Photo.self])
+            let modelConfiguration = ModelConfiguration(schema: schema)
+            modelContainer = try ModelContainer(for: schema, configurations: [modelConfiguration])
         } catch {
-            fatalError("Could not create ModelContainer: \(error)")
+            fatalError("Could not initialize ModelContainer: \(error)")
         }
-    }()
-
+    }
+    
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            MainView()
         }
-        .modelContainer(sharedModelContainer)
+        .modelContainer(modelContainer)
     }
 }

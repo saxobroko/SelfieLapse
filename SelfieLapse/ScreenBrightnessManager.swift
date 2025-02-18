@@ -1,7 +1,8 @@
 import UIKit
 
-class ScreenBrightnessManager {
+class ScreenBrightnessManager: ObservableObject {
     private var previousBrightness: CGFloat
+    private let maxBrightness: CGFloat = 1.0
     
     init() {
         previousBrightness = UIScreen.main.brightness
@@ -9,10 +10,22 @@ class ScreenBrightnessManager {
     
     func maximizeBrightness() {
         previousBrightness = UIScreen.main.brightness
-        UIScreen.main.brightness = 1.0
+        
+        // Ensure we're on the main thread for UI updates
+        DispatchQueue.main.async {
+            // Use a faster animation for flash effect
+            UIView.animate(withDuration: 0.05) {
+                UIScreen.main.brightness = self.maxBrightness
+            }
+        }
     }
     
     func restoreBrightness() {
-        UIScreen.main.brightness = previousBrightness
+        // Use a slower animation when restoring
+        DispatchQueue.main.async {
+            UIView.animate(withDuration: 0.2) {
+                UIScreen.main.brightness = self.previousBrightness
+            }
+        }
     }
 }

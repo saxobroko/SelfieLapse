@@ -1,3 +1,11 @@
+//
+//  ControlsView.swift
+//  SelfieLapse
+//
+//  Created by Saxon on 18/2/2025.
+//
+
+
 import SwiftUI
 
 struct ControlsView: View {

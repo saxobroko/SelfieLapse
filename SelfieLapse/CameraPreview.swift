@@ -6,6 +6,7 @@ struct CameraPreview: UIViewRepresentable {
     
     func makeUIView(context: Context) -> UIView {
         let view = UIView(frame: UIScreen.main.bounds)
+        view.backgroundColor = .black
         
         let previewLayer = AVCaptureVideoPreviewLayer(session: cameraManager.session)
         previewLayer.frame = view.frame

@@ -1,34 +1,26 @@
-//
-//  CameraManagerTests.swift
-//  SelfieLapse
-//
-//  Created by Saxon on 18/2/2025.
-//
-
-
 import XCTest
-@testable import TimeLens
+@testable import SelfieLapse // Make sure this matches your target name exactly
 
 final class CameraManagerTests: XCTestCase {
     var sut: CameraManager!
     
-    override func setUp() {
+    override func setUpWithError() throws {
         super.setUp()
         sut = CameraManager()
     }
     
-    override func tearDown() {
+    override func tearDownWithError() throws {
         sut = nil
         super.tearDown()
     }
     
-    func testCameraInitialization() {
+    func testCameraInitialization() throws {
         XCTAssertNotNil(sut, "CameraManager should be initialized")
         XCTAssertTrue(sut.isReady, "Camera should be ready after initialization")
     }
     
-    func testCapturePhoto() async {
-        let expectation = XCTestExpectation(description: "Photo capture")
+    func testCapturePhoto() async throws {
+        let expectation = expectation(description: "Photo capture")
         
         await sut.capturePhoto { image in
             XCTAssertNotNil(image, "Captured image should not be nil")

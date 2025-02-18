@@ -1,61 +1,29 @@
-//
-//  ContentView.swift
-//  SelfieLapse
-//
-//  Created by Saxon on 18/2/2025.
-//
-
 import SwiftUI
-import SwiftData
 
 struct ContentView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Query private var items: [Item]
-
+    @StateObject private var cameraManager = CameraManager()
+    @State private var capturedImage: UIImage?
+    
     var body: some View {
-        NavigationSplitView {
-            List {
-                ForEach(items) { item in
-                    NavigationLink {
-                        Text("Item at \(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))")
-                    } label: {
-                        Text(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))
-                    }
-                }
-                .onDelete(perform: deleteItems)
+        VStack {
+            if let image = capturedImage {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()
+            } else {
+                CameraPreview(cameraManager: cameraManager)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    EditButton()
+            
+            Button(action: {
+                cameraManager.capturePhoto { image in
+                    self.capturedImage = image
                 }
-                ToolbarItem {
-                    Button(action: addItem) {
-                        Label("Add Item", systemImage: "plus")
-                    }
-                }
-            }
-        } detail: {
-            Text("Select an item")
-        }
-    }
-
-    private func addItem() {
-        withAnimation {
-            let newItem = Item(timestamp: Date())
-            modelContext.insert(newItem)
-        }
-    }
-
-    private func deleteItems(offsets: IndexSet) {
-        withAnimation {
-            for index in offsets {
-                modelContext.delete(items[index])
+            }) {
+                Image(systemName: "camera.circle.fill")
+                    .font(.largeTitle)
+                    .padding()
             }
         }
     }
-}
-
-#Preview {
-    ContentView()
-        .modelContainer(for: Item.self, inMemory: true)
 }

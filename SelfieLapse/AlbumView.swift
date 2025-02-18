@@ -1,63 +1,85 @@
+// AlbumView.swift
+// Created by saxobroko
+// Last updated: 2025-02-18 03:22:18 UTC
+
 import SwiftUI
-import SwiftData
+import PhotosUI
+import AVKit
 
 struct AlbumView: View {
-    @Environment(\.modelContext) private var modelContext
     let album: Album
+    @StateObject private var timelapseGenerator = TimelapseGenerator()
     @StateObject private var cameraManager = CameraManager()
-    @State private var showingCamera = false
-    @State private var selectedPhoto: Photo?
+    @Environment(\.modelContext) private var modelContext
     
-    private let columns = [
-        GridItem(.adaptive(minimum: 100), spacing: 2)
-    ]
+    @State private var showingTimelapseSettings = false
+    @State private var timelapseSettings = TimelapseSettings()
+    @State private var showingTimelapseProgress = false
+    @State private var exportURL: URL?
+    @State private var showingPhotosPicker = false
+    @State private var showingAlbumPicker = false
+    @State private var selectedPhotos = [PhotosPickerItem]()
+    @State private var showingCamera = false
+    @State private var gridColumnCount = 3
+    @State private var selectedPhotoForDetail: Photo?
+    @State private var player: AVPlayer?
+    @State private var showErrorAlert = false
+    @State private var errorMessage = ""
+    @State private var status = ""
     
     var body: some View {
-        ScrollView {
-            LazyVGrid(columns: columns, spacing: 2) {
-                ForEach(album.photos) { photo in
-                    if let image = photo.image {
-                        Image(uiImage: image)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(minWidth: 0, maxWidth: .infinity)
-                            .aspectRatio(1, contentMode: .fill)
-                            .clipped()
-                            .onTapGesture {
-                                selectedPhoto = photo
-                            }
+        AlbumContentView(
+            album: album,
+            timelapseGenerator: timelapseGenerator,
+            cameraManager: cameraManager,
+            bindings: AlbumContentBindings(
+                showingTimelapseSettings: $showingTimelapseSettings,
+                timelapseSettings: $timelapseSettings,
+                showingTimelapseProgress: $showingTimelapseProgress,
+                exportURL: $exportURL,
+                showingPhotosPicker: $showingPhotosPicker,
+                showingAlbumPicker: $showingAlbumPicker,
+                selectedPhotos: $selectedPhotos,
+                showingCamera: $showingCamera,
+                gridColumnCount: $gridColumnCount,
+                selectedPhotoForDetail: $selectedPhotoForDetail,
+                player: $player,
+                showErrorAlert: $showErrorAlert,
+                errorMessage: $errorMessage,
+                status: $status
+            ),
+            handlers: AlbumContentHandlers(
+                onSavePhoto: { image, date in
+                    do {
+                        let data = image.jpegData(compressionQuality: 1.0) ?? Data()
+                        let fileName = UUID().uuidString + ".jpg"
+                        let photo = Photo(data: data, fileName: fileName)
+                        album.photos.append(photo)
+                        modelContext.insert(photo)
+                        try modelContext.save()
+                    } catch {
+                        errorMessage = "Failed to save photo: \(error.localizedDescription)"
+                        showErrorAlert = true
+                    }
+                },
+                onDeletePhoto: { photo in
+                    do {
+                        if let index = album.photos.firstIndex(where: { $0.id == photo.id }) {
+                            album.photos.remove(at: index)
+                        }
+                        modelContext.delete(photo)
+                        try modelContext.save()
+                    } catch {
+                        errorMessage = "Failed to delete photo: \(error.localizedDescription)"
+                        showErrorAlert = true
                     }
                 }
-            }
-        }
-        .navigationTitle(album.name)
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            Button(action: { showingCamera = true }) {
-                Image(systemName: "camera")
-            }
-        }
-        .sheet(isPresented: $showingCamera) {
-            CameraView(cameraManager: cameraManager) { image in
-                if let image = image {
-                    savePhoto(image)
-                }
-                showingCamera = false
-            }
-        }
-        .sheet(item: $selectedPhoto) { photo in
-            PhotoDetailView(photo: photo)
-        }
+            )
+        )
     }
-    
-    private func savePhoto(_ image: UIImage) {
-        let fileName = "\(UUID().uuidString).jpg"
-        if let data = image.jpegData(compressionQuality: 0.8) {
-            let fileURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent(fileName)
-            try? data.write(to: fileURL)
-            
-            let photo = Photo(imageFileName: fileName)
-            album.photos.append(photo)
-        }
-    }
+}
+
+#Preview {
+    AlbumView(album: Album(name: "Preview Album"))
+        .modelContainer(for: [Album.self, Photo.self])
 }

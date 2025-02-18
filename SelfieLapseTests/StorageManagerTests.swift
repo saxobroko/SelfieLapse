@@ -1,23 +1,15 @@
-//
-//  StorageManagerTests.swift
-//  SelfieLapse
-//
-//  Created by Saxon on 18/2/2025.
-//
-
-
 import XCTest
-@testable import TimeLens
+@testable import SelfieLapse  // Make sure this matches your app target name
 
-final class StorageManagerTests: XCTestCase {
+class StorageManagerTests: XCTestCase {
     var sut: StorageManager!
     
-    override func setUp() {
+    override func setUpWithError() throws {
         super.setUp()
         sut = StorageManager.shared
     }
     
-    override func tearDown() {
+    override func tearDownWithError() throws {
         sut = nil
         super.tearDown()
     }

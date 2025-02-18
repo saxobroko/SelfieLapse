@@ -1,3 +1,11 @@
+//
+//  UserPreferences.swift
+//  SelfieLapse
+//
+//  Created by Saxon on 18/2/2025.
+//
+
+
 import Foundation
 
 class UserPreferences: ObservableObject {
